@@ -26,26 +26,30 @@ def fetch_jira_data():
 
         for issue in selected_issues:
             field_data = issue['fields'].get('customfield_13140')
+            print("Full field data for issue:", issue['key'])
+            print(field_data)  # Debug print to show the full field_data content
+
             if field_data:
-                request_type_name = field_data['requestType']
+                request_type_name = field_data.get('requestType', {}).get('name')
                 if request_type_name == "Upsell/Expansion Opportunity Deck":
                     issue_key = issue['key']
                     summary = issue['fields'].get('summary', '')
-                    current_status = field_data['currentStatus']['status']
+                    current_status = field_data.get('currentStatus', {}).get('status')
 
-                    # Hypothetical paths to the form data
+                    # Hypothetical paths to the form data (check all keys in field_data)
                     form_data = field_data.get('formData', {})
-                    print(form_data)
+                    print(f"Form Data for issue {issue_key}: {form_data}")  # Debug print to show form data
 
-                    product_usage = field_data.get('formData', {}).get('productUsage', [])
-                    performance = field_data.get('formData', {}).get('performance', '')
+                    product_usage = form_data.get('productUsage', [])
+                    performance = form_data.get('performance', '')
 
                     issues_dict[issue_key] = {
                         'Summary': summary,
                         'Request Type': request_type_name,
                         'Current Status': current_status,
                         'Product Usage': product_usage,
-                        'Performance': performance
+                        'Performance': performance,
+                        'Full Field Data': field_data  # Including full field data for further inspection
                     }
 
         for key, value in issues_dict.items():
@@ -55,5 +59,3 @@ def fetch_jira_data():
         print(f"Error message: {response.text}")
 
 fetch_jira_data()
-
-#"customfield_10840":[{"self":"https://taulia.atlassian.net/rest/api/3/customFieldOption/16712","value":"American Water","id":"16712"}]
