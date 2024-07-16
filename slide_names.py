@@ -3,23 +3,12 @@
 # Cover Page
 # Situation Summary
 # Text only (ignore)
-
-
 # Current And Target Terms
-
 # Current Terms
-
 # Current Terms (Business Unit specific) - this is for Airbus, something specific
-
 # Liquidity Demand & Discount Potential across APR
-
 # Peer CCC Benchmark
-
 # Peer DSO Benchmark
-
-
-
-
 
 # Not Standard - ??
 
