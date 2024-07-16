@@ -6,12 +6,18 @@ from pptx.enum.text import PP_PARAGRAPH_ALIGNMENT
 from pptx.dml.color import RGBColor
 import time
 from dotenv import load_dotenv
+from bing_image_downloader import downloader
+import certifi
 
 load_dotenv()
 
+# Set the SSL certificate file environment variable
+os.environ['SSL_CERT_FILE'] = certifi.where()
+
 # Set up your OpenAI API key
 openai.api_key = os.getenv('OPENAI_API_KEY')
-buyer_name = "AcmeBirdSeed"
+buyer_name = "American Water"
+buyer_industry = "Water Utility"  # Add the buyer's industry
 open_ai_assistant_name = 'Presentation Generator'
 last_message_timestamp = 0
 
@@ -95,6 +101,12 @@ def get_summary_from_assistant(client, assistant_name, images_folder, buyer_name
     return response.dict()['content'][0]['text']['value']
 
 
+def download_industry_image(industry, download_folder):
+    downloader.download(industry, limit=1, output_dir=download_folder, adult_filter_off=True, force_replace=False, timeout=60)
+    downloaded_images = os.listdir(os.path.join(download_folder, industry))
+    return os.path.join(download_folder, industry, downloaded_images[0]) if downloaded_images else None
+
+
 def add_title_slide(prs, logo_path, background_path):
     slide_layout = prs.slide_layouts[5]
     slide = prs.slides.add_slide(slide_layout)
@@ -113,6 +125,7 @@ def add_title_slide(prs, logo_path, background_path):
     title_placeholder = buyer_name
     subtitle_placeholder = "Terms Extension Opportunity Assessment June 24"
 
+    # Create a textbox for the title with a solid background
     text_left = Inches(1)
     text_top = Inches(3)
     text_width = Inches(8)
@@ -122,14 +135,27 @@ def add_title_slide(prs, logo_path, background_path):
     title_frame.text = title_placeholder
     title_frame.paragraphs[0].font.size = Pt(32)
     title_frame.paragraphs[0].font.bold = True
+    title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
     title_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.CENTER
 
+    # Set background color for the title box
+    fill = title_box.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black color
+
+    # Create a textbox for the subtitle with a solid background
     text_top = Inches(4)
     subtitle_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = subtitle_placeholder
     subtitle_frame.paragraphs[0].font.size = Pt(24)
+    subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
     subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.CENTER
+
+    # Set background color for the subtitle box
+    fill = subtitle_box.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black color
 
 
 def add_footer(prs, slide):
@@ -181,6 +207,10 @@ def add_content_slide(prs, title, img_path, logo_path):
     title_box = slide.shapes.title
     title_box.text = title
 
+    # Set the font size for the title
+    for paragraph in title_box.text_frame.paragraphs:
+        paragraph.font.size = Pt(20)  # Adjust the font size as needed
+
     left = Inches(1)
     top = Inches(1.5)
     height = Inches(5)
@@ -195,8 +225,13 @@ def add_content_slide(prs, title, img_path, logo_path):
     add_footer(prs, slide)
 
 
-def create_ppt(images_folder, output_ppt, logo_path, background_path, assistant_name):
+def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_industry):
     prs = Presentation()
+
+    background_path = download_industry_image(buyer_industry, images_folder)
+    if not background_path:
+        print("Error: Unable to download background image. Using default background.")
+        background_path = os.path.join(images_folder, 'background.jpg')
 
     add_title_slide(prs, logo_path, background_path)
 
@@ -221,8 +256,7 @@ def create_ppt(images_folder, output_ppt, logo_path, background_path, assistant_
 # Paths and assistant name
 images_folder = 'images'
 logo_path = os.path.join(images_folder, 'taulia-logo.png')
-background_path = os.path.join(images_folder, 'background.jpg')
-output_ppt = 'presentations/output_presentation.pptx'
+output_ppt = f'presentations/opportunity_deck_{buyer_name}.pptx'
 assistant_name = 'Presentation Generator'
 
-create_ppt(images_folder, output_ppt, logo_path, background_path, assistant_name)
+create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_industry)

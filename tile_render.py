@@ -3,11 +3,11 @@ import looker_sdk
 from looker_sdk import models40
 
 # Initialize Looker SDK
-sdk = looker_sdk.init40("looker.ini")
+sdk = looker_sdk.init40("looker_na.ini")
 
 # Define global variables
 GLOBAL_SPACE = "Dimitar Ivanov"
-GLOBAL_BUYER_NAME = 'AcmeBirdSeed'
+GLOBAL_BUYER_NAME = 'American Water'
 
 # Define dashboard dictionary with names (LookML dashboards)
 dashboards_dict = {
@@ -19,8 +19,8 @@ dashboards_dict = {
 # Define filter updates
 filter_updates = {
     "Buyer Company Name": GLOBAL_BUYER_NAME,
-    "Scenario Description": "No Terms Extension",
-    "Spend File": 'AcmeBirdSeed_spend_022024',
+    "Scenario Description": "Harmonized terms",
+    "Spend File": 'LIVE Data',
 }
 
 
@@ -55,19 +55,36 @@ class LookerDashboardManager:
             udd = existing_udds[0]
         return self.sdk.update_dashboard(str(udd.id), body)
 
+    def copy_non_lookml_dashboard(self, dashboard_id, udd_title):
+        folder_id = self.get_folder_id(GLOBAL_SPACE)
+        print(f"Folder ID for space '{GLOBAL_SPACE}': {folder_id}")
+
+        print(f"Copying non-LookML dashboard with ID '{dashboard_id}' to space ID '{folder_id}'")
+        new_dashboard = self.sdk.copy_dashboard(dashboard_id, folder_id)
+        new_dashboard_id = new_dashboard.id
+
+        # Update the title of the copied dashboard
+        body = models40.WriteDashboard(title=udd_title)
+        updated_dashboard = self.sdk.update_dashboard(new_dashboard_id, body)
+
+        return updated_dashboard
+
     def generate_space(self, name):
         if not self.sdk.search_folders(name=name):
             folder = models40.CreateFolder(parent_id=1, name=name)
             self.sdk.create_folder(folder)
 
-    def sync_all_lookml(self):
-        for lookml_dash_id in dashboards_dict.keys():
+    def sync_all_dashboards(self):
+        for dash_id in dashboards_dict.keys():
             try:
-                dashboard = self.sdk.dashboard(lookml_dash_id)
+                dashboard = self.sdk.dashboard(dash_id)
                 buyer_name = GLOBAL_BUYER_NAME if GLOBAL_BUYER_NAME is not None else "Unknown"
-                lookml_dashboard_title = f"{dashboard.title} - {buyer_name}"
+                dashboard_title = f"{dashboard.title} - {buyer_name}"
                 self.generate_space(GLOBAL_SPACE)
-                new_dashboard = self.sync_lookml_to_udd(lookml_dash_id, lookml_dashboard_title)
+                if '::' in dash_id:  # Check if the dashboard ID is a LookML dashboard
+                    new_dashboard = self.sync_lookml_to_udd(dash_id, dashboard_title)
+                else:
+                    new_dashboard = self.copy_non_lookml_dashboard(dash_id, dashboard_title)
                 new_dashboard_id = new_dashboard.id
 
                 # Update filters in the copied dashboard
@@ -95,7 +112,7 @@ class LookerDashboardManager:
                 # Export specified elements of the new dashboard as PNG images
                 dashboard_elements = self.sdk.dashboard_dashboard_elements(dashboard_id=new_dashboard_id)
                 for element in dashboard_elements:
-                    if element.title in dashboards_dict[lookml_dash_id]:
+                    if element.title in dashboards_dict[dash_id]:
                         print(f"Exporting element: {element.title}")
                         if element.id:
                             title = element.title or f"element_{element.id}"
@@ -130,17 +147,17 @@ class LookerDashboardManager:
 
                 # Clean up: delete the temporary dashboard
                 try:
-                    self.sdk.delete_dashboard(new_dashboard_id)
+                    # self.sdk.delete_dashboard(new_dashboard_id)
                     print(f"Deleted temporary dashboard with ID: {new_dashboard_id}")
                 except looker_sdk.error.SDKError as e:
                     print(f"Error deleting dashboard {new_dashboard_id}: {e.message}")
 
             except looker_sdk.error.SDKError as e:
-                print(f"Error fetching or syncing dashboard {lookml_dash_id}: {e}")
+                print(f"Error fetching or syncing dashboard {dash_id}: {e}")
 
 
 # Create an instance of the LookerDashboardManager
 manager = LookerDashboardManager(sdk)
 
-# Sync all LookML dashboards
-manager.sync_all_lookml()
+# Sync all dashboards
+manager.sync_all_dashboards()
