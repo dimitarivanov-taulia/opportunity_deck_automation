@@ -163,9 +163,9 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     logo_top = Inches(0.5)
     logo_height = Inches(0.4)
     slide.shapes.add_picture(logo_path, logo_left, logo_top, height=logo_height)
-
+    date_time = datetime.now()
     title_placeholder = "Terms Extension Opportunity Assessment"
-    subtitle_placeholder = f"{datetime.now().month} {datetime.now().year}"
+    subtitle_placeholder = f"{date_time.strftime('%B %Y')}"
 
     # Create a textbox for the title
     text_left = Inches(1)
