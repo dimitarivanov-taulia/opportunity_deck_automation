@@ -8,19 +8,22 @@ import time
 from dotenv import load_dotenv
 from bing_image_downloader import downloader
 import certifi
+import requests
+from datetime import datetime
 
 load_dotenv()
 
 # Set the SSL certificate file environment variable
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
-# Set up your OpenAI API key
+# Set up your OpenAI API key and Bing Image Search API key
 openai.api_key = os.getenv('OPENAI_API_KEY')
+bing_image_api_key = os.getenv('BING_IMAGE_API_KEY')
+scale_serp_api_key = os.getenv('SCALE_SERP_API_KEY')
 buyer_name = "American Water"
-buyer_industry = "Water Utility"  # Add the buyer's industry
+images_folder = 'images'  # Folder where logos and other images are stored
 open_ai_assistant_name = 'Presentation Generator'
 last_message_timestamp = 0
-
 
 def get_assistant_id_by_name(client, assistant_name):
     list_assistants = client.beta.assistants.list()
@@ -29,11 +32,9 @@ def get_assistant_id_by_name(client, assistant_name):
             return assistant.id
     raise Exception(f"No Assistant with name '{assistant_name}' found on OpenAI!")
 
-
 def start_new_conversation(client):
     new_thread = client.beta.threads.create()
     return new_thread
-
 
 def send_message(client, conversation, assistant_id, content):
     print(f"Sending message to assistant:\n{content}")
@@ -47,7 +48,6 @@ def send_message(client, conversation, assistant_id, content):
         assistant_id=assistant_id
     )
 
-
 def has_message_completed(message):
     if 'content' not in message.dict():
         return False
@@ -58,7 +58,6 @@ def has_message_completed(message):
     if 'value' not in message.dict()['content'][0]['text']:
         return False
     return True
-
 
 def get_assistant_response(client, conversation, last_message_timestamp):
     try:
@@ -75,7 +74,6 @@ def get_assistant_response(client, conversation, last_message_timestamp):
     except Exception as e:
         print(f"Unable to retrieve assistant response: {e}")
         return None
-
 
 # Function to upload images and get a summary from the assistant
 def get_summary_from_assistant(client, assistant_name, images_folder, buyer_name):
@@ -100,14 +98,51 @@ def get_summary_from_assistant(client, assistant_name, images_folder, buyer_name
 
     return response.dict()['content'][0]['text']['value']
 
+def download_image(query, download_folder, limit=1):
+    downloader.download(query, limit=limit, output_dir=download_folder, adult_filter_off=True, force_replace=False, timeout=60)
+    downloaded_images = os.listdir(os.path.join(download_folder, query))
+    if downloaded_images:
+        return os.path.join(download_folder, query, downloaded_images[0])
+    return None
 
-def download_industry_image(industry, download_folder):
-    downloader.download(industry, limit=1, output_dir=download_folder, adult_filter_off=True, force_replace=False, timeout=60)
-    downloaded_images = os.listdir(os.path.join(download_folder, industry))
-    return os.path.join(download_folder, industry, downloaded_images[0]) if downloaded_images else None
+def search_text(query, api_key):
+    url = "https://api.scaleserp.com/search"
+    params = {
+        "api_key": api_key,
+        "q": query,
+        "location": "United States",
+        "hl": "en",
+        "gl": "us"
+    }
+    response = requests.get(url, params=params)
+    results = response.json().get('organic_results', [])
+    if results:
+        for result in results:
+            if 'snippet' in result:
+                return result['snippet']
+    return None
 
+def extract_industry_from_snippet(snippet):
+    # Simplified method to extract industry name from snippet
+    keyword = 'industry'
+    if keyword in snippet:
+        parts = snippet.split(keyword)[0].strip().split()
+        return ' '.join(parts)
+    return "General"
 
-def add_title_slide(prs, logo_path, background_path):
+def download_buyer_logo(buyer_name, download_folder):
+    return download_image(f"{buyer_name} logo", download_folder)
+
+def download_industry_background(industry, download_folder):
+    return download_image(f"{industry} background", download_folder)
+
+def get_buyer_industry(buyer_name, api_key):
+    snippet = search_text(f"{buyer_name} industry", api_key)
+    if snippet:
+        return extract_industry_from_snippet(snippet)
+    return "General"
+
+def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     slide_layout = prs.slide_layouts[5]
     slide = prs.slides.add_slide(slide_layout)
 
@@ -117,46 +152,42 @@ def add_title_slide(prs, logo_path, background_path):
     slide_height = prs.slide_height
     slide.shapes.add_picture(background_path, left, top, width=slide_width, height=slide_height)
 
+    # Add buyer logo if available
+    if buyer_logo_path:
+        buyer_logo_left = Inches(1)
+        buyer_logo_top = Inches(3.5)
+        buyer_logo_height = Inches(2)
+        slide.shapes.add_picture(buyer_logo_path, buyer_logo_left, buyer_logo_top, height=buyer_logo_height)
+
     logo_left = Inches(7.75)
     logo_top = Inches(0.5)
     logo_height = Inches(0.4)
     slide.shapes.add_picture(logo_path, logo_left, logo_top, height=logo_height)
 
-    title_placeholder = buyer_name
-    subtitle_placeholder = "Terms Extension Opportunity Assessment June 24"
+    title_placeholder = "Terms Extension Opportunity Assessment"
+    subtitle_placeholder = f"{datetime.now().month} {datetime.now().year}"
 
-    # Create a textbox for the title with a solid background
+    # Create a textbox for the title
     text_left = Inches(1)
-    text_top = Inches(3)
-    text_width = Inches(8)
-    text_height = Inches(1)
+    text_top = Inches(5.5)
+    text_width = Inches(7)
+    text_height = Inches(0.5)
     title_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     title_frame = title_box.text_frame
     title_frame.text = title_placeholder
-    title_frame.paragraphs[0].font.size = Pt(32)
+    title_frame.paragraphs[0].font.size = Pt(28)
     title_frame.paragraphs[0].font.bold = True
     title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
-    title_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.CENTER
+    title_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
-    # Set background color for the title box
-    fill = title_box.fill
-    fill.solid()
-    fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black color
-
-    # Create a textbox for the subtitle with a solid background
-    text_top = Inches(4)
+    # Create a textbox for the subtitle
+    text_top = Inches(6)
     subtitle_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = subtitle_placeholder
     subtitle_frame.paragraphs[0].font.size = Pt(24)
     subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
-    subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.CENTER
-
-    # Set background color for the subtitle box
-    fill = subtitle_box.fill
-    fill.solid()
-    fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black color
-
+    subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
 def add_footer(prs, slide):
     slide_width = prs.slide_width
@@ -179,7 +210,6 @@ def add_footer(prs, slide):
     fill.fore_color.rgb = RGBColor(255, 102, 0)
     bar.line.fill.background()
 
-
 def add_summary_slide(prs, summary):
     slide_layout = prs.slide_layouts[5]
     slide = prs.slides.add_slide(slide_layout)
@@ -198,7 +228,6 @@ def add_summary_slide(prs, summary):
         paragraph.alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
     add_footer(prs, slide)
-
 
 def add_content_slide(prs, title, img_path, logo_path):
     slide_layout = prs.slide_layouts[5]
@@ -224,18 +253,32 @@ def add_content_slide(prs, title, img_path, logo_path):
 
     add_footer(prs, slide)
 
-
-def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_industry):
+def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_name):
     prs = Presentation()
 
-    background_path = download_industry_image(buyer_industry, images_folder)
+    print("Finding buyer industry...")
+    buyer_industry = get_buyer_industry(buyer_name, scale_serp_api_key)
+    print(f"Buyer industry found: {buyer_industry}")
+
+    print("Downloading industry background image...")
+    background_path = download_industry_background(buyer_industry, images_folder)
     if not background_path:
         print("Error: Unable to download background image. Using default background.")
         background_path = os.path.join(images_folder, 'background.jpg')
+    print(f"Background image set to {background_path}")
 
-    add_title_slide(prs, logo_path, background_path)
+    print("Downloading buyer logo...")
+    buyer_logo_path = download_buyer_logo(buyer_name, images_folder)
+    if buyer_logo_path:
+        print(f"Buyer logo downloaded to {buyer_logo_path}")
+    else:
+        print("Buyer logo not found. Skipping buyer logo.")
 
+    add_title_slide(prs, logo_path, background_path, buyer_logo_path)
+
+    print("Getting summary from assistant...")
     summary = get_summary_from_assistant(openai, assistant_name, images_folder, buyer_name)
+    print("Summary obtained from assistant.")
 
     add_summary_slide(prs, summary)
 
@@ -252,11 +295,11 @@ def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_indus
     except Exception as e:
         print(f"Error saving presentation: {e}")
 
-
 # Paths and assistant name
 images_folder = 'images'
 logo_path = os.path.join(images_folder, 'taulia-logo.png')
 output_ppt = f'presentations/opportunity_deck_{buyer_name}.pptx'
 assistant_name = 'Presentation Generator'
 
-create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_industry)
+create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_name)
+
