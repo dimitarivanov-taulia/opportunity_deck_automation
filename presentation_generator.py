@@ -175,7 +175,7 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     title_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     title_frame = title_box.text_frame
     title_frame.text = title_placeholder
-    title_frame.paragraphs[0].font.size = Pt(28)
+    title_frame.paragraphs[0].font.size = Pt(24)
     title_frame.paragraphs[0].font.bold = True
     title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
     title_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
@@ -185,7 +185,7 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     subtitle_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = subtitle_placeholder
-    subtitle_frame.paragraphs[0].font.size = Pt(24)
+    subtitle_frame.paragraphs[0].font.size = Pt(20)
     subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
     subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
@@ -213,6 +213,16 @@ def add_footer(prs, slide):
 def add_summary_slide(prs, summary):
     slide_layout = prs.slide_layouts[5]
     slide = prs.slides.add_slide(slide_layout)
+
+    text_left = Inches(1)
+    text_top = Inches(0.17)
+    text_width = Inches(3)
+    text_height = Inches(0.5)
+    title_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
+    title_frame = title_box.text_frame
+    title_frame.text = "Situation Summary"
+    title_frame.paragraphs[0].font.size = Pt(28)
+    title_frame.paragraphs[0].font.bold = True
 
     text_left = Inches(1)
     text_top = Inches(1)
