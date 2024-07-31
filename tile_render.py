@@ -1,27 +1,26 @@
+import json
+import os
 import time
 import looker_sdk
 from looker_sdk import models40
+
+# Load the issues information from the JSON file
+with open('issues_info.json', 'r') as json_file:
+    issues_info = json.load(json_file)
+
+# Assuming we're working with the first issue in the list for now
+first_issue = issues_info[0]
+GLOBAL_BUYER_NAME = first_issue["Buyer Company Name"]
+FILTER_UPDATES = first_issue
+
+# Load the dashboard dictionary from environment variable
+DASHBOARD_DICT = json.loads(os.getenv('DASHBOARD_DICT'))
 
 # Initialize Looker SDK
 sdk = looker_sdk.init40("looker_na.ini")
 
 # Define global variables
 GLOBAL_SPACE = "Dimitar Ivanov"
-GLOBAL_BUYER_NAME = 'American Water'
-
-# Define dashboard dictionary with names (LookML dashboards)
-dashboards_dict = {
-    'payables_benchmark::buyer__payables_benchmark': ['Peer DPO', 'Card Adoption', 'Supplier Payment Terms Comparison'],
-    '165': ['Top WC Potential Suppliers', 'Working Capital Released', 'Industry Term Comparison'],
-    'payables_planner::buyer__payables_planner_supplier_list': ['Buyer - Payables Planner Supplier List', ]
-}
-
-# Define filter updates
-filter_updates = {
-    "Buyer Company Name": GLOBAL_BUYER_NAME,
-    "Scenario Description": "Harmonized terms",
-    "Spend File": 'LIVE Data',
-}
 
 
 class LookerDashboardManager:
@@ -75,7 +74,7 @@ class LookerDashboardManager:
             self.sdk.create_folder(folder)
 
     def sync_all_dashboards(self):
-        for dash_id in dashboards_dict.keys():
+        for dash_id in DASHBOARD_DICT.keys():
             try:
                 dashboard = self.sdk.dashboard(dash_id)
                 buyer_name = GLOBAL_BUYER_NAME if GLOBAL_BUYER_NAME is not None else "Unknown"
@@ -89,7 +88,7 @@ class LookerDashboardManager:
 
                 # Update filters in the copied dashboard
                 for filter in new_dashboard.dashboard_filters:
-                    if filter.name in filter_updates:
+                    if filter.name in FILTER_UPDATES:
                         updated_filter = models40.WriteDashboardFilter(
                             allow_multiple_values=filter.allow_multiple_values,
                             dimension=filter.dimension,
@@ -98,7 +97,7 @@ class LookerDashboardManager:
                             required=filter.required,
                             row=filter.row,
                             title=filter.title,
-                            default_value=filter_updates[filter.name],
+                            default_value=FILTER_UPDATES[filter.name],
                             model=filter.model,
                             name=filter.name,
                             type=filter.type,
@@ -112,7 +111,7 @@ class LookerDashboardManager:
                 # Export specified elements of the new dashboard as PNG images
                 dashboard_elements = self.sdk.dashboard_dashboard_elements(dashboard_id=new_dashboard_id)
                 for element in dashboard_elements:
-                    if element.title in dashboards_dict[dash_id]:
+                    if element.title in DASHBOARD_DICT[dash_id]:
                         print(f"Exporting element: {element.title}")
                         if element.id:
                             title = element.title or f"element_{element.id}"
@@ -147,7 +146,7 @@ class LookerDashboardManager:
 
                 # Clean up: delete the temporary dashboard
                 try:
-                    # self.sdk.delete_dashboard(new_dashboard_id)
+                    self.sdk.delete_dashboard(new_dashboard_id)
                     print(f"Deleted temporary dashboard with ID: {new_dashboard_id}")
                 except looker_sdk.error.SDKError as e:
                     print(f"Error deleting dashboard {new_dashboard_id}: {e.message}")

@@ -1,3 +1,4 @@
+import json
 import os
 import openai
 from pptx import Presentation
@@ -12,6 +13,17 @@ import requests
 from datetime import datetime
 
 load_dotenv()
+# Load the issues information from the JSON file
+with open('issues_info.json', 'r') as json_file:
+    issues_info = json.load(json_file)
+
+# Assuming we're working with the first issue in the list for now
+first_issue = issues_info[0]
+GLOBAL_BUYER_NAME = first_issue["Buyer Company Name"]
+FILTER_UPDATES = first_issue
+
+# Load the dashboard dictionary from environment variable
+DASHBOARD_DICT = json.loads(os.getenv('DASHBOARD_DICT'))
 
 # Set the SSL certificate file environment variable
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -20,10 +32,17 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 openai.api_key = os.getenv('OPENAI_API_KEY')
 bing_image_api_key = os.getenv('BING_IMAGE_API_KEY')
 scale_serp_api_key = os.getenv('SCALE_SERP_API_KEY')
-buyer_name = "American Water"
+buyer_name = GLOBAL_BUYER_NAME
 images_folder = 'images'  # Folder where logos and other images are stored
+data_folder = 'data'  # Folder where the data files are stored
 open_ai_assistant_name = 'Presentation Generator'
 last_message_timestamp = 0
+
+assistant_subtitle_questions = {
+    'Peer DPO': f"Based on the provided csv data how many days is {buyer_name} behind or above the peer group average? Give short sentence only with the answer.",
+    'Industry Term Comparison': f"Based on the provided csv data how many days is {buyer_name} behind or above industry norms across top 10 industries? Give short sentence only with the answer.",
+    'Working Capital Released': f"Based on the provided csv data what working capital can {buyer_name} unlock? Give short sentence only with the answer and format number like MM."
+}
 
 def get_assistant_id_by_name(client, assistant_name):
     list_assistants = client.beta.assistants.list()
@@ -75,26 +94,41 @@ def get_assistant_response(client, conversation, last_message_timestamp):
         print(f"Unable to retrieve assistant response: {e}")
         return None
 
-# Function to upload images and get a summary from the assistant
-def get_summary_from_assistant(client, assistant_name, images_folder, buyer_name):
+def get_summary_from_assistant(client, assistant_name, data_folder, buyer_name):
     assistant_id = get_assistant_id_by_name(client, assistant_name)
     conversation = start_new_conversation(client)
 
-    # Prepare the content to send
-    content = f"Buyer's name: {buyer_name}\nImages:\n"
-    for filename in os.listdir(images_folder):
-        if filename.endswith(('.png', '.jpg', '.jpeg')) and not filename.startswith(
-                'taulia-logo') and not filename.startswith('background'):
-            content += f"- {filename}\n"
+    content = f"Buyer's name: {buyer_name}\nData:\n"
+    for filename in os.listdir(data_folder):
+        if filename.endswith('_with_filters.csv'):
+            with open(os.path.join(data_folder, filename), 'r') as file:
+                csv_content = file.read()
+                content += f"\nCSV file: {filename}\n{csv_content}\n"
 
-    # Send the message to the assistant
     send_message(client, conversation, assistant_id, content)
 
-    # Wait for the response
     response = None
     while response is None:
         response = get_assistant_response(client, conversation, last_message_timestamp)
-        time.sleep(2)  # Adding sleep to avoid rapid polling
+        time.sleep(2)
+
+    return response.dict()['content'][0]['text']['value']
+
+def get_subtitle_from_assistant(client, assistant_name, element_name, data_file_path):
+    assistant_id = get_assistant_id_by_name(client, assistant_name)
+    conversation = start_new_conversation(client)
+
+    with open(data_file_path, 'r') as file:
+        csv_content = file.read()
+
+    content = f"Buyer's name: {buyer_name}\nCSV file content:\n{csv_content}\n{assistant_subtitle_questions[element_name]}"
+
+    send_message(client, conversation, assistant_id, content)
+
+    response = None
+    while response is None:
+        response = get_assistant_response(client, conversation, last_message_timestamp)
+        time.sleep(2)
 
     return response.dict()['content'][0]['text']['value']
 
@@ -123,7 +157,6 @@ def search_text(query, api_key):
     return None
 
 def extract_industry_from_snippet(snippet):
-    # Simplified method to extract industry name from snippet
     keyword = 'industry'
     if keyword in snippet:
         parts = snippet.split(keyword)[0].strip().split()
@@ -152,7 +185,6 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     slide_height = prs.slide_height
     slide.shapes.add_picture(background_path, left, top, width=slide_width, height=slide_height)
 
-    # Add buyer logo if available
     if buyer_logo_path:
         buyer_logo_left = Inches(1)
         buyer_logo_top = Inches(3.5)
@@ -167,7 +199,6 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     title_placeholder = "Terms Extension Opportunity Assessment"
     subtitle_placeholder = f"{date_time.strftime('%B %Y')}"
 
-    # Create a textbox for the title
     text_left = Inches(1)
     text_top = Inches(5.5)
     text_width = Inches(7)
@@ -177,24 +208,22 @@ def add_title_slide(prs, logo_path, background_path, buyer_logo_path=None):
     title_frame.text = title_placeholder
     title_frame.paragraphs[0].font.size = Pt(24)
     title_frame.paragraphs[0].font.bold = True
-    title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
+    title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
     title_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
-    # Create a textbox for the subtitle
     text_top = Inches(6)
     subtitle_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = subtitle_placeholder
     subtitle_frame.paragraphs[0].font.size = Pt(20)
-    subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)  # White color
+    subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
     subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
 def add_footer(prs, slide):
     slide_width = prs.slide_width
 
     footer_text = "© 2023 Taulia LLC. Confidential information. Do not distribute."
-    footer_box = slide.shapes.add_textbox(Inches(0.5), prs.slide_height - Inches(0.22), slide_width / 2 - Inches(0.5),
-                                          Inches(0.5))
+    footer_box = slide.shapes.add_textbox(Inches(0.5), prs.slide_height - Inches(0.22), slide_width / 2 - Inches(0.5), Inches(0.5))
     footer_frame = footer_box.text_frame
     footer_frame.text = footer_text
     footer_frame.paragraphs[0].font.size = Pt(10)
@@ -239,20 +268,28 @@ def add_summary_slide(prs, summary):
 
     add_footer(prs, slide)
 
-def add_content_slide(prs, title, img_path, logo_path):
+def add_content_slide(prs, title, img_path, logo_path, subtitle=None):
     slide_layout = prs.slide_layouts[5]
     slide = prs.slides.add_slide(slide_layout)
 
     title_box = slide.shapes.title
     title_box.text = title
 
-    # Set the font size for the title
     for paragraph in title_box.text_frame.paragraphs:
-        paragraph.font.size = Pt(20)  # Adjust the font size as needed
+        paragraph.font.size = Pt(20)
+
+    if subtitle:
+        subtitle_box = slide.shapes.add_textbox(Inches(1), Inches(1.3), Inches(8), Inches(0.5))
+        subtitle_frame = subtitle_box.text_frame
+        subtitle_frame.text = subtitle
+        subtitle_frame.word_wrap = True
+        subtitle_frame.paragraphs[0].font.size = Pt(14)
+        subtitle_frame.paragraphs[0].font.color.rgb = RGBColor(255, 102, 0)
+        subtitle_frame.paragraphs[0].alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
 
     left = Inches(1)
-    top = Inches(1.5)
-    height = Inches(5)
+    top = Inches(2)
+    height = Inches(4.5)
     slide.shapes.add_picture(img_path, left, top, height=height)
 
     logo_height = Inches(0.3)
@@ -287,17 +324,21 @@ def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_name)
     add_title_slide(prs, logo_path, background_path, buyer_logo_path)
 
     print("Getting summary from assistant...")
-    summary = get_summary_from_assistant(openai, assistant_name, images_folder, buyer_name)
+    summary = get_summary_from_assistant(openai, assistant_name, data_folder, buyer_name)
     print("Summary obtained from assistant.")
 
     add_summary_slide(prs, summary)
 
     for filename in os.listdir(images_folder):
-        if filename.endswith(('.png', '.jpg', '.jpeg')) and not filename.startswith(
-                'taulia-logo') and not filename.startswith('background'):
+        if filename.endswith(('.png', '.jpg', '.jpeg')) and not filename.startswith('taulia-logo') and not filename.startswith('background'):
             slide_title = os.path.splitext(filename)[0]
             img_path = os.path.join(images_folder, filename)
-            add_content_slide(prs, slide_title, img_path, logo_path)
+            subtitle = None
+            if slide_title in assistant_subtitle_questions:
+                data_file_path = os.path.join(data_folder, f"{slide_title}_with_filters.csv")
+                if os.path.exists(data_file_path):
+                    subtitle = get_subtitle_from_assistant(openai, assistant_name, slide_title, data_file_path)
+            add_content_slide(prs, slide_title, img_path, logo_path, subtitle)
 
     try:
         prs.save(output_ppt)
@@ -305,11 +346,10 @@ def create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_name)
     except Exception as e:
         print(f"Error saving presentation: {e}")
 
-# Paths and assistant name
 images_folder = 'images'
 logo_path = os.path.join(images_folder, 'taulia-logo.png')
+data_folder = 'data'  # Folder where the data files are stored
 output_ppt = f'presentations/opportunity_deck_{buyer_name}.pptx'
 assistant_name = 'Presentation Generator'
 
 create_ppt(images_folder, output_ppt, logo_path, assistant_name, buyer_name)
-

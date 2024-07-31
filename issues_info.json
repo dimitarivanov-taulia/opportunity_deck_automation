@@ -1,0 +1,23 @@
+[
+    {
+        "Issue Key": "DATA-9981",
+        "Buyer Company Name": "American Water",
+        "Summary": "American Water: Terms Extension Oppty Deck Test",
+        "Description": "This is a test to see if we can pull the correct information of a Jira Request",
+        "Gross Discount Target": 4000000.0,
+        "Blended Rate APR": 8.0,
+        "Buyer APR Floor": "6",
+        "Target Term": 75.0,
+        "Working Capital Goal": 100000000.0,
+        "Products we\u2019re selling": "Terms extension",
+        "Opportunity Type": "Upsell",
+        "Current Program Performance": "very positive",
+        "Current Products": [
+            "DD",
+            "Invoicing",
+            "Self-Service"
+        ],
+        "Funding Options": "DD Only",
+        "Spend File": "LIVE Data"
+    }
+]
